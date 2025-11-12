@@ -90,7 +90,7 @@ impl Daemon {
 
                 // Spawn a task to handle this client
                 // The `server` object itself is the stream
-                tokio::spawn(async move {
+                tokio::task::spawn_local(async move {
                     if let Err(e) = Client::new(adapter_clone, device_map_clone)
                         .handle(&mut server)
                         .await

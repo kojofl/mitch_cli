@@ -74,7 +74,11 @@ impl DeviceActor {
                             // (You'll need to find your specific characteristic UUID)
                             // peripheral.subscribe(characteristic).await;
                             // peripheral.write(..., b"START_TX_COMMAND", ...).await;
-                            let c = self.peripheral.characteristics();
+                            let mut c = self.peripheral.characteristics();
+                            if c.is_empty() {
+                                self.peripheral.discover_services().await.unwrap();
+                                c = self.peripheral.characteristics();
+                            }
                             let data_char = c.iter().find(|c| c.uuid == DATA_CHAR).unwrap();
                             self.peripheral.subscribe(data_char).await.unwrap();
                             let cmd_char = c.iter().find(|c| c.uuid == COMMAND_CHAR).unwrap();
@@ -86,6 +90,7 @@ impl DeviceActor {
                                 )
                                 .await.unwrap();
                             self.peripheral.read(cmd_char).await.unwrap();
+                            println!("test");
                         }
                         Some(DeviceCommand::Shutdown) => {
                             println!("Actor {}: Received Shutdown command.", addr);
@@ -101,17 +106,15 @@ impl DeviceActor {
                 maybe_data = notifications_stream.next() => {
                     match maybe_data {
                         Some(data) => {
-                            if let Some(outlet) = lsl_outlet.as_ref() {
-                                // --- HOT PATH ---
-                                // println!("Actor {}: Got data {:?}", addr, data.value);
-                                // 1. Parse data.value
-                                // 2. lsl_outlet.as_ref().unwrap().push_sample(parsed_data);
-                                outlet.push_sample(&[
-                                    i16::from_le_bytes([data.value[4], data.value[5]]),
-                                    i16::from_le_bytes([data.value[6], data.value[7]]),
-                                    i16::from_le_bytes([data.value[8], data.value[9]]),
-                                ]).unwrap()
+                            if data.uuid != DATA_CHAR {
+                                continue;
                             }
+                            if let Some(outlet) = lsl_outlet.as_ref() {
+                                outlet
+                                    .push_sample(
+                                        &data.value[4..].iter().map(|b| *b as i16).collect::<Vec<i16>>(),
+                                    )
+                                    .unwrap();                            }
                         }
                         None => {
                             eprintln!("Actor {}: BLE connection dropped! Shutting down.", addr);
