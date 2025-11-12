@@ -64,7 +64,6 @@ impl Daemon {
                                 .handle(&mut stream)
                                 .await
                             {
-                                let _ = stream.write(e.to_string().as_ref());
                                 eprintln!("Client error: {}", e);
                             }
                             println!("Client disconnected.");
@@ -92,10 +91,10 @@ impl Daemon {
                 // Spawn a task to handle this client
                 // The `server` object itself is the stream
                 tokio::spawn(async move {
-                    if let Err(e) =
-                        handle_client(&mut server, adapter_clone, device_map_clone).await
+                    if let Err(e) = Client::new(adapter_clone, device_map_clone)
+                        .handle(&mut server)
+                        .await
                     {
-                        let _ = stream.write_all(e.to_string().as_ref()).ok();
                         eprintln!("Client error: {}", e);
                     }
                     println!("Client disconnected.");

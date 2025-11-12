@@ -29,8 +29,11 @@ impl Client {
     where
         S: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut command_json = Vec::new();
-        stream.read_to_end(&mut command_json).await?;
+        let mut len_buf = [0u8; 8];
+        stream.read_exact(&mut len_buf).await?;
+        let len = u64::from_le_bytes(len_buf) as usize;
+        let mut command_json = vec![0; len];
+        stream.read_exact(&mut command_json).await?;
         let command: ClientCommand = serde_json::from_slice(&command_json)?;
 
         let response = match command {
@@ -72,6 +75,8 @@ impl Client {
         };
 
         let response_json = serde_json::to_vec(&response)?;
+        let len = response_json.len() as u64;
+        stream.write_all(&len.to_le_bytes()).await?;
         stream.write_all(&response_json).await?;
         Ok(response)
     }
