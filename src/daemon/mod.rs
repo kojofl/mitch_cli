@@ -5,7 +5,6 @@ use btleplug::platform::{Adapter, Manager};
 use client::Client;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
 #[cfg(unix)]
 use tokio::net::UnixListener;
 #[cfg(windows)]

@@ -19,7 +19,6 @@ pub enum ClientCommand {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum DaemonResponse {
     Ok,
-    Devices(Vec<String>), // Vec of device names/addresses
-    Data(Vec<u8>),        // Data read from a characteristic
+    Devices(Vec<String>),
     Error(String),
 }

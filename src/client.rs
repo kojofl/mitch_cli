@@ -12,11 +12,8 @@ pub async fn run_client(command: ClientCommand) -> Result<()> {
     let mut stream = match UnixStream::connect(IPC_SOCKET_PATH).await {
         Ok(stream) => stream,
         Err(e) => {
-            eprintln!(
-                "Error: Could not connect to daemon ({}). Is it running?",
-                IPC_SOCKET_PATH
-            );
-            eprintln!("Try running: `my-ble-tool daemon-start`");
+            eprintln!("Error: Could not connect to daemon. Is it running?");
+            eprintln!("Try running: `mitch_cli daemon-start`");
             return Err(e.into());
         }
     };
@@ -25,11 +22,8 @@ pub async fn run_client(command: ClientCommand) -> Result<()> {
     let mut stream = match ClientOptions::new().open(IPC_SOCKET_PATH) {
         Ok(stream) => stream,
         Err(e) => {
-            eprintln!(
-                "Error: Could not connect to daemon ({}). Is it running?",
-                IPC_SOCKET_PATH
-            );
-            eprintln!("Try running: `my-ble-tool daemon-start`");
+            eprintln!("Error: Could not connect to daemon. Is it running?");
+            eprintln!("Try running: `mitch__cli daemon-start`");
             return Err(e.into());
         }
     };
@@ -52,7 +46,11 @@ pub async fn run_client(command: ClientCommand) -> Result<()> {
     match response {
         DaemonResponse::Ok => println!("Success."),
         DaemonResponse::Error(err) => eprintln!("Daemon error: {}", err),
-        _ => println!("{:?}", response),
+        DaemonResponse::Devices(items) => {
+            for device in items {
+                println!("{device}");
+            }
+        }
     }
 
     Ok(())

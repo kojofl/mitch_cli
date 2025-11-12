@@ -37,9 +37,19 @@ impl Client {
         let command: ClientCommand = serde_json::from_slice(&command_json)?;
 
         let response = match command {
-            ClientCommand::Scan { timeout_ms: _ } => {
-                // ... (scan logic is unchanged)
-                DaemonResponse::Ok // Placeholder
+            ClientCommand::Scan { timeout_ms } => {
+                self.adapter.start_scan(ScanFilter::default()).await?;
+                time::sleep(Duration::from_millis(timeout_ms)).await;
+                self.adapter.stop_scan().await?;
+                let mut devices = Vec::new();
+                for per in self.adapter.peripherals().await? {
+                    let properties = per.properties().await.unwrap();
+                    let n = properties.and_then(|p| p.local_name).unwrap_or_default();
+                    if n.starts_with("mitch") {
+                        devices.push(n);
+                    }
+                }
+                DaemonResponse::Devices(devices)
             }
 
             ClientCommand::Connect { name } => self.connect(name.as_str()).await?,

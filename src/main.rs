@@ -31,7 +31,6 @@ enum Command {
     },
 
     Record {
-        #[clap(short, long)]
         name: String,
     },
 }
