@@ -1,16 +1,4 @@
-use lsl::{StreamInfo, StreamOutlet};
 use serde::Serialize;
-
-pub struct MyInfo(pub StreamInfo);
-unsafe impl Send for MyInfo {}
-impl MyInfo {
-    pub fn from_info(info: StreamInfo) -> Self {
-        Self(info)
-    }
-}
-
-pub struct MyOutlet(pub StreamOutlet);
-unsafe impl Send for MyOutlet {}
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]

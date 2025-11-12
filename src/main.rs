@@ -1,8 +1,9 @@
 use clap::{Parser, Subcommand};
-
+use daemon::Daemon;
+use tokio::task::LocalSet;
 mod client;
 mod daemon;
-mod mitch;
+pub mod mitch;
 mod protocol;
 
 #[derive(Debug, Parser)]
@@ -42,7 +43,8 @@ async fn main() -> anyhow::Result<()> {
     match args.command {
         Command::DaemonStart => {
             println!("Starting daemon...");
-            daemon::run_daemon().await?;
+            let localset = LocalSet::new();
+            localset.run_until(Daemon::new().await?.run()).await?;
         }
         Command::Scan { timeout } => {
             client::run_client(protocol::ClientCommand::Scan {
