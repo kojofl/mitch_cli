@@ -2,12 +2,11 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(unix)]
 pub const IPC_SOCKET_PATH: &str = "/tmp/mitch.sock";
-#[cfg(windows)]
-pub const IPC_SOCKET_PATH: &str = "\\\\.\\pipe\\mitch";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClientCommand {
     Scan { timeout_ms: u64 },
+    Status,
     Connect { name: String },
     Disconnect { name: String },
     Record { name: String },
