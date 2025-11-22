@@ -4,15 +4,15 @@ use crate::{
     protocol::{ClientCommand, DaemonResponse, DeviceStatus},
 };
 use ::futures::future::join_all;
-use anyhow::Result;
-use bluez_async::{AdapterInfo, BluetoothSession};
-use std::time::Duration;
+use anyhow::{Result, anyhow};
+use bluez_async::{AdapterInfo, BluetoothSession, DeviceInfo, MacAddress};
+use std::{process::Stdio, str::FromStr, time::Duration};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::{
     sync::oneshot::{self},
     time,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 pub struct Client {
     session: BluetoothSession,
@@ -142,6 +142,11 @@ impl Client {
         self.session.connect(&device.id).await?;
         info!("Daemon: Connected.");
 
+        if let Err(e) = Self::update_connection(&device).await {
+            warn!("Failed to upgrade connection with error: {}", e);
+            warn!("Continuing with default config");
+        }
+
         // 3. Create the actor's command channel
         let (tx, rx) = tokio::sync::mpsc::channel(32); // 32 is a typical buffer size
         let map_clone = self.device_map.clone();
@@ -153,5 +158,53 @@ impl Client {
         map.insert(name.to_owned(), tx);
 
         Ok(DaemonResponse::Ok)
+    }
+
+    pub(crate) async fn update_connection(device: &DeviceInfo) -> Result<()> {
+        let name = device.name.as_ref().expect("mitch to have name");
+        info!("Attempting to update the connection to {}", name);
+        let handle = Self::get_handle_from_mac(device.mac_address)
+            .await
+            .ok_or(anyhow!("Unable to retrieve btle handle from mac_address"))?;
+
+        let mut hci_handle = tokio::process::Command::new("hcitool")
+            .arg("lecup")
+            .arg(handle) // Handle
+            .arg("40") // min
+            .arg("56") // max
+            .arg("0") // latency
+            .arg("200") // timeout
+            .spawn()?;
+
+        let exit_status = hci_handle.wait().await?;
+
+        if exit_status.success() {
+            info!("Upgraded btle connection to {}, successfully", name);
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to upgrade btle connection for {}", name))
+        }
+    }
+
+    async fn get_handle_from_mac(mac: MacAddress) -> Option<String> {
+        let hci_handle = tokio::process::Command::new("hcitool")
+            .arg("con")
+            .stdout(Stdio::piped())
+            .spawn()
+            .ok()?;
+        let out = hci_handle.wait_with_output().await.ok()?;
+        let out_s = String::from_utf8(out.stdout).ok()?;
+        let mut out_lines = out_s.lines();
+        out_lines.next();
+        out_lines.find_map(|l| {
+            let mut spl = l.split_ascii_whitespace();
+            let m = spl.nth(2)?;
+            let handle = spl.nth(1)?;
+            if mac == MacAddress::from_str(m).ok()? {
+                Some(handle.to_string())
+            } else {
+                None
+            }
+        })
     }
 }

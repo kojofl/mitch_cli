@@ -1,5 +1,5 @@
 use super::{DeviceCommand, DeviceMap};
-use crate::{mitch::Commands, protocol::DeviceStatus};
+use crate::{daemon::client::Client, mitch::Commands, protocol::DeviceStatus};
 use anyhow::{Result, anyhow};
 use bluez_async::{
     BluetoothSession, CharacteristicEvent, DeviceEvent, DeviceInfo, WriteOptions, WriteType,
@@ -7,6 +7,7 @@ use bluez_async::{
 use core::panic;
 use futures::StreamExt as _;
 use lsl::{Pushable as _, StreamInfo, StreamOutlet};
+use std::time::Duration;
 use tokio::sync::mpsc::Receiver;
 use tracing::{info, warn};
 use uuid::{Uuid, uuid};
@@ -76,7 +77,7 @@ impl DeviceActor {
             .await?;
         let data_id = data_char.id.clone();
 
-        loop {
+        'main: loop {
             tokio::select! {
                 maybe_command = self.rx.recv() => {
                     match maybe_command {
@@ -151,24 +152,39 @@ impl DeviceActor {
                         Some(bluez_async::BluetoothEvent::Device { id: _, event: DeviceEvent::Connected { connected } }) => {
                             if !connected {
                                 info!("Actor {}: lost connection attempting reconnect", self.name);
-                                if self.session.connect(&self.device.id).await.is_err() {
-                                    warn!("Failed to reconnect to {} cleaning up", self.name);
-                                }
-                                if lsl_outlet.is_some() {
-                                    self.session
-                                        .write_characteristic_value_with_options(
-                                            &cmd_char.id,
-                                            Commands::StartPressureStream.as_ref(),
-                                            WriteOptions {
-                                                write_type: Some(WriteType::WithResponse),
-                                                ..Default::default()
-                                            },
-                                        )
-                                        .await?;
-                                    self.session.read_characteristic_value(&cmd_char.id).await?;
-                                    self.session.start_notify(&data_char.id).await?;
+                                let exp_backoff = [2, 4, 8, 16];
+                                let max_attempts = exp_backoff.len();
+                                for (i, backoff) in exp_backoff.iter().enumerate() {
+                                    if self.session.connect(&self.device.id).await.is_err() {
+                                        if i == max_attempts {
+                                            warn!("Failed to reconnect to {} cleaning up", self.name);
+                                            break 'main;
+                                        }
+                                        warn!("Failed to reconnect to {}, attempting again in {}s", self.name, backoff);
+                                        tokio::time::sleep(Duration::from_secs(*backoff)).await;
+                                        continue
+                                    }
+                                    if lsl_outlet.is_some() {
+                                        self.session
+                                            .write_characteristic_value_with_options(
+                                                &cmd_char.id,
+                                                Commands::StartPressureStream.as_ref(),
+                                                WriteOptions {
+                                                    write_type: Some(WriteType::WithResponse),
+                                                    ..Default::default()
+                                                },
+                                            )
+                                            .await?;
+                                        self.session.read_characteristic_value(&cmd_char.id).await?;
+                                        self.session.start_notify(&data_char.id).await?;
+                                    }
+                                    break;
                                 }
                                 info!("Actor {}: sucessfully reconnected", self.name);
+                                if let Err(e) = Client::update_connection(&self.device).await {
+                                    warn!("Failed to upgrade connection with error: {}", e);
+                                    warn!("Continuing with default config");
+                                }
                             }
                         }
                         None => {
