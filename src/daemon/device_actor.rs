@@ -152,8 +152,8 @@ impl DeviceActor {
                         Some(bluez_async::BluetoothEvent::Device { id: _, event: DeviceEvent::Connected { connected } }) => {
                             if !connected {
                                 info!("Actor {}: lost connection attempting reconnect", self.name);
-                                let exp_backoff = [2, 4, 8, 16];
-                                let max_attempts = exp_backoff.len();
+                                let exp_backoff = [2, 4, 8, 16, u64::MAX];
+                                let max_attempts = exp_backoff.len() - 1;
                                 for (i, backoff) in exp_backoff.iter().enumerate() {
                                     if self.session.connect(&self.device.id).await.is_err() {
                                         if i == max_attempts {
